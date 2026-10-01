@@ -21,10 +21,11 @@ MedQueue has not been deployed to AWS. These steps prepare the current Docker se
 
 1. Build and push tagged backend and frontend images to ECR from CI. Do not use mutable `latest` tags for a production rollout.
 2. Place `docker-compose.yml` and a production Compose override on EC2. Update image references to the ECR image tags. Remove public host port mappings for MySQL and backend in the production override; the frontend can reach both services through the internal Compose network.
-3. Set `DB_URL` to the RDS endpoint, `DB_USERNAME`, `DB_PASSWORD`, a newly generated Base64-encoded `JWT_SECRET` of at least 32 decoded bytes, `JWT_EXPIRATION_SECONDS`, `CORS_ALLOWED_ORIGINS` for the HTTPS application origin, and `JPA_DDL_AUTO=update` for the first schema creation. After the schema is established, use `validate` and apply future changes with a migration tool before adopting that stricter setting.
-4. Set `BOOTSTRAP_ADMIN_EMAIL` and a unique `BOOTSTRAP_ADMIN_PASSWORD` of at least 12 characters for the first launch. The app creates the administrator only if that email is unused. Remove both variables after the admin is created; a conflicting non-admin account causes startup to fail rather than being elevated.
-5. Set the frontend Vite URL build args empty so browser traffic stays same-origin through Nginx. Rebuild the frontend image whenever those build-time values or frontend code change.
-6. Pull the pinned image tags and run `docker compose up -d`. Review `docker compose ps` and `docker compose logs --tail=200 backend frontend mysql`.
+3. Set `DB_URL` to the RDS endpoint, `DB_USERNAME`, `DB_PASSWORD`, a newly generated Base64-encoded `JWT_SECRET` of at least 32 decoded bytes, `JWT_EXPIRATION_SECONDS`, `CORS_ALLOWED_ORIGINS` for the HTTPS application origin, and `JPA_DDL_AUTO=update` for the first schema creation. The deployable/default Spring configuration requires the database URL, username, password, and JWT secret; do not set `SPRING_PROFILES_ACTIVE=dev` on EC2. After the schema is established, use `validate` and apply future changes with a migration tool before adopting that stricter setting.
+4. Disable the publicly permitted development API documentation on the deployed application with `SPRINGDOC_API_DOCS_ENABLED=false` and `SPRINGDOC_SWAGGER_UI_ENABLED=false`, or protect those routes at the deployment boundary.
+5. Set `BOOTSTRAP_ADMIN_EMAIL` and a unique `BOOTSTRAP_ADMIN_PASSWORD` of at least 12 characters for the first launch. The app creates the administrator only if that email is unused. Remove both variables after the admin is created; a conflicting non-admin account causes startup to fail rather than being elevated.
+6. Set the frontend Vite URL build args empty so browser traffic stays same-origin through Nginx. Rebuild the frontend image whenever those build-time values or frontend code change.
+7. Pull the pinned image tags and run `docker compose up -d`. Review `docker compose ps` and `docker compose logs --tail=200 backend frontend mysql`.
 
 ## Health, logs, and restart behavior
 

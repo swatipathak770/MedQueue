@@ -52,6 +52,7 @@ Appointment tokens are unique per doctor and appointment date. Booking locks the
 | CRUD | `/api/admin/departments` | ADMIN | Manage departments |
 | CRUD | `/api/admin/doctors` | ADMIN | Manage doctor accounts/profiles |
 | CRUD | `/api/admin/slots` | ADMIN | Manage weekly slot templates |
+| GET | `/api/admin/queues` | ADMIN | View today’s queue summary for every doctor |
 | GET | `/api/admin/analytics` | ADMIN | View today’s per-doctor metrics |
 
 Protected endpoints accept `Authorization: Bearer <JWT>`. Role and ownership rules are checked by Spring Security and service logic. Validation and API errors are returned as JSON.
@@ -60,18 +61,19 @@ Protected endpoints accept `Authorization: Bearer <JWT>`. Role and ownership rul
 
 ### Backend using the existing MySQL installation
 
-From `medqueue-backend`, set `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET` as environment variables if your local database differs from the existing defaults. `JWT_SECRET` must be Base64 text that decodes to at least 32 bytes. Then run:
+The deployable/default configuration requires explicit `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET` environment variables. For local development only, activate the `dev` profile to use the existing MySQL installation defaults (`localhost:3306/medqueue`, `root`/`root`) and a fixed development-only JWT key. Never activate this profile in a deployed environment. The key is Base64 text that decodes to at least 32 bytes. From `medqueue-backend`, run:
 
 ```powershell
+$env:SPRING_PROFILES_ACTIVE = "dev"
 mvn clean test
 mvn spring-boot:run
 ```
 
-The backend listens on `http://localhost:8080`. Swagger UI is at [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html), OpenAPI JSON at `/v3/api-docs`, and health at [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health). The first admin can be created by setting `BOOTSTRAP_ADMIN_EMAIL` and a unique `BOOTSTRAP_ADMIN_PASSWORD` (minimum 12 characters) before startup. Remove the bootstrap variables after the account is created.
+The backend listens on `http://localhost:8080`. In IntelliJ, set the active Spring profile to `dev` in the run configuration. Outside the dev profile, provide the four required environment variables explicitly. `JWT_SECRET` must be Base64 text decoding to at least 32 bytes. Swagger UI is at [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html), OpenAPI JSON at `/v3/api-docs`, and health at [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health). Swagger UI and OpenAPI are public in the current security configuration for development. For production, disable them with `SPRINGDOC_SWAGGER_UI_ENABLED=false` and `SPRINGDOC_API_DOCS_ENABLED=false`, or protect them at the deployment boundary. CORS origins are restricted by `CORS_ALLOWED_ORIGINS`; configure it to the deployed frontend origin. The first admin can be created by setting `BOOTSTRAP_ADMIN_EMAIL` and a unique `BOOTSTRAP_ADMIN_PASSWORD` (minimum 12 characters) before startup. Remove the bootstrap variables after the account is created.
 
 ### Frontend development server
 
-From `medqueue-frontend`, copy `.env.example` to `.env`, then run:
+From `medqueue-frontend`, run:
 
 ```powershell
 npm install
@@ -80,7 +82,7 @@ npm test
 npm run build
 ```
 
-Vite runs on `http://localhost:5173` and talks to the backend on port 8080. The frontend test suite covers live queue lookup and active-visit selection.
+Vite runs on `http://localhost:5173` and talks to the backend on port 8080. No frontend environment file is required for local development; `VITE_API_URL` and `VITE_WS_URL` are optional overrides. The frontend test suite covers live queue lookup and active-visit selection.
 
 ## Docker Compose
 
@@ -92,7 +94,7 @@ docker compose up --build
 
 Open the React app at `http://localhost`, the backend at `http://localhost:8080`, Swagger at `http://localhost:8080/swagger-ui.html`, and health at `http://localhost:8080/actuator/health`. The Compose MySQL port maps to host port 3307 to avoid colliding with a local MySQL server on 3306. MySQL data persists in the `medqueue-mysql` named volume. To stop the services, use `docker compose down`; this keeps the database volume. To erase local database data, explicitly remove the volume with `docker compose down -v`.
 
-Compose environment variables are documented in [.env.example](.env.example). Core values are `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_SECONDS`, `CORS_ALLOWED_ORIGINS`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, and `JPA_DDL_AUTO`. The browser-facing Vite values are build-time variables; leave them blank when using the included same-origin Nginx proxy.
+Compose environment variables are documented in [.env.example](.env.example). It contains placeholders only: replace every password and secret before starting Compose. `DB_USERNAME`, `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`, and `JWT_SECRET` are mandatory for Compose; the backend's default/deployable configuration also requires `DB_URL`. `JWT_SECRET` must be newly generated Base64 text that decodes to at least 32 bytes. Core optional values include `JWT_EXPIRATION_SECONDS`, `CORS_ALLOWED_ORIGINS`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, and `JPA_DDL_AUTO`. The browser-facing Vite values are build-time variables; leave them blank when using the included same-origin Nginx proxy.
 
 ## Testing and verification
 
@@ -104,6 +106,8 @@ mvn clean test
 ```
 
 The suite covers application startup on MySQL, patient register/login/JWT/RBAC, password hashing and duplicate registration, appointment token allocation, serialized queue advancement, and the appointment composite index plan. Frontend checks run with `npm test` and `npm run build` from `medqueue-frontend`.
+
+The test classpath activates the local-only `dev` profile so `mvn test` works with the existing local MySQL defaults. Security integration tests exercise valid, malformed, expired, and incorrectly signed JWTs; the PATIENT/DOCTOR/ADMIN REST role matrix; patient history isolation; doctor queue ownership; admin CRUD/analytics/live-queue access; and unauthenticated 401 responses.
 
 No AWS deployment has been performed. See [AWS deployment preparation](docs/AWS_DEPLOYMENT.md) for EC2, RDS, network, secret, image, health-check, and rollback guidance.
 
