@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api, errorMessage } from '../api/client'
 import { EmptyState, Notice, Panel } from '../components/Primitives'
+import AdminLiveQueueOverview from '../components/AdminLiveQueueOverview'
 
-const tabs = ['Departments', 'Doctors', 'Slot templates', 'Analytics']
+const tabs = ['Live Queue', 'Departments', 'Doctors', 'Slot templates', 'Analytics']
 const emptyDoctor = { name: '', email: '', password: '', phone: '', departmentId: '', specialization: '', avgConsultMinutes: 15 }
 const emptySlot = { doctorId: '', dayOfWeek: 'MONDAY', startTime: '09:00', endTime: '12:00', slotCapacity: 20 }
 export default function AdminDashboard() {
@@ -23,6 +24,7 @@ export default function AdminDashboard() {
   return <div className="space-y-6">
     {(error || success) && <Notice tone={success ? 'success' : 'error'}>{success || error}</Notice>}
     <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2">{tabs.map((item) => <button key={item} className={`tab-button ${tab === item ? 'tab-active' : ''}`} onClick={() => setTab(item)}>{item}</button>)}</div>
+    {tab === 'Live Queue' && <AdminLiveQueueOverview />}
     {tab === 'Departments' && <Panel title="Departments" hint="Organize the services patients can browse.">
       <form className="mb-5 flex flex-wrap gap-3" onSubmit={saveDepartment}><input className="field max-w-sm" required maxLength="100" placeholder="Department name" value={departmentName} onChange={(e) => setDepartmentName(e.target.value)} /><button className="button-primary" disabled={busy}>{editingDepartment ? 'Save department' : 'Add department'}</button>{editingDepartment && <button type="button" className="button-secondary" onClick={() => { setEditingDepartment(null); setDepartmentName('') }}>Cancel</button>}</form>
       {departments.length ? <div className="divide-y divide-slate-100">{departments.map((d) => <div className="flex items-center justify-between py-3" key={d.id}><span className="font-semibold text-ink">{d.name}</span><div className="flex gap-2"><button className="button-small" onClick={() => { setEditingDepartment(d); setDepartmentName(d.name) }}>Edit</button><button className="button-small button-danger" onClick={() => remove(d.name, `/api/admin/departments/${d.id}`)}>Delete</button></div></div>)}</div> : <EmptyState title="No departments yet">Add a department before setting up doctors.</EmptyState>}
