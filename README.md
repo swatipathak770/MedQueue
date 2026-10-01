@@ -28,9 +28,12 @@ The STOMP broker is Spring’s in-memory simple broker, suitable for one backend
 - `doctors`: one-to-one user account, department, specialization, average consultation duration, and availability.
 - `slots`: recurring doctor/day templates with start/end and capacity.
 - `appointments`: patient, doctor, date, optional slot (null for walk-in), token, status, and timestamps.
+- `appointment_status_history`: append-only initial/status transition entries, actor key, and timestamp; each row references its appointment.
 - `queue_states`: per-doctor/per-day open state and latest called token.
 
 Appointment tokens are unique per doctor and appointment date. Booking locks the doctor row while it checks capacity and assigns the next token. Booking and queue mutations use READ COMMITTED so the transaction sees changes committed while it waited for that row lock; an integration test starts two actual database transactions together and verifies only one call-next succeeds. Queue transitions allow only one CALLED/IN_PROGRESS appointment at a time and enforce doctor ownership. The STOMP channel requires JWT authentication, restricts doctors to their own queue, and blocks clients from publishing queue messages. The composite index `idx_appointments_doctor_date_status` supports queue queries. See [the EXPLAIN SQL](medqueue-backend/docs/appointment-index-explain.sql); the integration test verifies MySQL can use that index when selected. On the current small local database, MySQL’s unforced optimizer plan may choose the unique doctor/date/token index instead, so no response-time improvement is claimed.
+
+Every booking records an initial `WAITING` audit entry; supported doctor queue transitions append their old/new statuses inside the same transaction. `changed_by` stores `USER:<users.id>` (or `SYSTEM` for future system initiated transitions) to avoid copying email addresses into audit rows. Authenticated patients can read their own appointment audit, doctors can read audit for their appointments, and admins can read any appointment audit through `GET /api/appointments/{id}/status-history`. For an existing MySQL schema, apply [the audit table SQL](medqueue-backend/docs/appointment-status-history.sql) once before running the updated backend; it creates the table, appointment foreign key, and chronological index.
 
 ## API summary
 
@@ -43,6 +46,7 @@ Appointment tokens are unique per doctor and appointment date. Booking locks the
 | GET | `/api/doctors/{id}/slots?date=YYYY-MM-DD` | Public | View weekday slots and remaining capacity |
 | POST | `/api/appointments` | PATIENT | Book a slot or join walk-in queue |
 | GET | `/api/appointments/me` | PATIENT | View own appointment history |
+| GET | `/api/appointments/{id}/status-history` | Appointment patient, assigned doctor, or ADMIN | Read chronological appointment status audit |
 | GET | `/api/doctor/queue` | DOCTOR | View own current-day queue |
 | POST | `/api/doctor/queue/next` | DOCTOR | Call the next waiting patient |
 | POST | `/api/doctor/queue/{id}/complete` | DOCTOR | Complete own called visit |

@@ -35,7 +35,13 @@ public class Appointment {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getCalledAt() { return calledAt; }
     public Instant getCompletedAt() { return completedAt; }
-    public void call() { status = AppointmentStatus.CALLED; calledAt = Instant.now(); }
-    public void complete() { status = AppointmentStatus.DONE; completedAt = Instant.now(); }
-    public void skip() { status = AppointmentStatus.SKIPPED; completedAt = Instant.now(); }
+    public void transitionTo(AppointmentStatus next) {
+        boolean valid = (status == AppointmentStatus.WAITING && (next == AppointmentStatus.CALLED || next == AppointmentStatus.SKIPPED))
+                || (status == AppointmentStatus.CALLED && (next == AppointmentStatus.DONE || next == AppointmentStatus.SKIPPED))
+                || (status == AppointmentStatus.IN_PROGRESS && next == AppointmentStatus.DONE);
+        if (!valid) throw new IllegalStateException("Unsupported appointment status transition: " + status + " -> " + next);
+        status = next;
+        if (next == AppointmentStatus.CALLED) calledAt = Instant.now();
+        if (next == AppointmentStatus.DONE || next == AppointmentStatus.SKIPPED) completedAt = Instant.now();
+    }
 }

@@ -17,8 +17,10 @@ public class QueueService {
     private final AppointmentRepository appointments;
     private final QueueStateRepository states;
     private final ApplicationEventPublisher events;
-    public QueueService(DoctorRepository doctors, AppointmentRepository appointments, QueueStateRepository states, ApplicationEventPublisher events) {
-        this.doctors = doctors; this.appointments = appointments; this.states = states; this.events = events;
+    private final AppointmentStatusAuditService statusAudit;
+    public QueueService(DoctorRepository doctors, AppointmentRepository appointments, QueueStateRepository states, ApplicationEventPublisher events,
+                        AppointmentStatusAuditService statusAudit) {
+        this.doctors = doctors; this.appointments = appointments; this.states = states; this.events = events; this.statusAudit = statusAudit;
     }
     @Transactional(readOnly = true)
     public com.medqueue.dto.response.QueueSummaryResponse today(String email) {
@@ -45,7 +47,7 @@ public class QueueService {
             throw new ConflictException("Complete or skip the current patient before calling the next patient");
         Appointment next = appointments.findFirstByDoctorIdAndAppointmentDateAndStatusOrderByTokenNumberAsc(doctor.getId(), today, AppointmentStatus.WAITING)
                 .orElseThrow(() -> new ConflictException("Queue is empty"));
-        next.call(); state.setCurrentTokenNumber(next.getTokenNumber());
+        statusAudit.transition(next, AppointmentStatus.CALLED, doctor.getUser().getId()); state.setCurrentTokenNumber(next.getTokenNumber());
         events.publishEvent(new QueueChangedEvent(doctor.getId(), today));
         return next;
     }
@@ -55,7 +57,7 @@ public class QueueService {
         verifyOwner(doctor, appointment);
         if (appointment.getStatus() != AppointmentStatus.CALLED && appointment.getStatus() != AppointmentStatus.IN_PROGRESS)
             throw new ConflictException("Only a called or in-progress appointment can be completed");
-        appointment.complete(); events.publishEvent(new QueueChangedEvent(doctor.getId(), appointment.getAppointmentDate())); return appointment;
+        statusAudit.transition(appointment, AppointmentStatus.DONE, doctor.getUser().getId()); events.publishEvent(new QueueChangedEvent(doctor.getId(), appointment.getAppointmentDate())); return appointment;
     }
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Appointment skip(String email, Long appointmentId) {
@@ -63,7 +65,7 @@ public class QueueService {
         verifyOwner(doctor, appointment);
         if (appointment.getStatus() != AppointmentStatus.WAITING && appointment.getStatus() != AppointmentStatus.CALLED)
             throw new ConflictException("Only a waiting or called appointment can be skipped");
-        appointment.skip(); events.publishEvent(new QueueChangedEvent(doctor.getId(), appointment.getAppointmentDate())); return appointment;
+        statusAudit.transition(appointment, AppointmentStatus.SKIPPED, doctor.getUser().getId()); events.publishEvent(new QueueChangedEvent(doctor.getId(), appointment.getAppointmentDate())); return appointment;
     }
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void setAvailability(String email, boolean available) {

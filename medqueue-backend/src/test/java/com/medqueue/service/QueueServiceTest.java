@@ -14,7 +14,8 @@ class QueueServiceTest {
     private final DoctorRepository doctors = mock(DoctorRepository.class);
     private final AppointmentRepository appointments = mock(AppointmentRepository.class);
     private final QueueStateRepository states = mock(QueueStateRepository.class);
-    private final QueueService service = new QueueService(doctors, appointments, states, mock(org.springframework.context.ApplicationEventPublisher.class));
+    private final AppointmentStatusAuditService statusAudit = mock(AppointmentStatusAuditService.class);
+    private final QueueService service = new QueueService(doctors, appointments, states, mock(org.springframework.context.ApplicationEventPublisher.class), statusAudit);
 
     @Test void callsExactlyTheNextWaitingPatient() {
         LocalDate today = LocalDate.now(); Doctor doctor = mock(Doctor.class); QueueState state = mock(QueueState.class); Appointment patient = mock(Appointment.class);
@@ -25,8 +26,10 @@ class QueueServiceTest {
         when(appointments.existsByDoctorIdAndAppointmentDateAndStatusIn(5L, today, List.of(AppointmentStatus.CALLED, AppointmentStatus.IN_PROGRESS))).thenReturn(false);
         when(appointments.findFirstByDoctorIdAndAppointmentDateAndStatusOrderByTokenNumberAsc(5L, today, AppointmentStatus.WAITING)).thenReturn(Optional.of(patient));
 
+        when(doctor.getUser()).thenReturn(mock(User.class));
+        when(doctor.getUser().getId()).thenReturn(4L);
         assertSame(patient, service.callNext("doctor@example.com"));
-        verify(patient).call();
+        verify(statusAudit).transition(patient, AppointmentStatus.CALLED, 4L);
     }
 
     @Test void refusesToAdvanceWhileAnotherPatientIsActive() {

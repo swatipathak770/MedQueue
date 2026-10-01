@@ -43,7 +43,7 @@ class AdminQueueOverviewIntegrationTest {
         Doctor doctor = doctors.saveAndFlush(new Doctor(doctorUser, department, "General", 10));
         appointments.saveAndFlush(new Appointment(patient, doctor, LocalDate.now(), null, 1));
         Appointment called = new Appointment(patient, doctor, LocalDate.now(), null, 2);
-        called.call();
+        called.transitionTo(com.medqueue.entity.AppointmentStatus.CALLED);
         appointments.saveAndFlush(called);
 
         mvc.perform(get("/api/admin/queues"))

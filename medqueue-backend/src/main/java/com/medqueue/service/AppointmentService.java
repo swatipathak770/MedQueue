@@ -23,10 +23,12 @@ public class AppointmentService {
     private final UserRepository users;
     private final QueueStateRepository queueStates;
     private final ApplicationEventPublisher events;
+    private final AppointmentStatusAuditService statusAudit;
     public AppointmentService(AppointmentRepository appointments, DoctorRepository doctors, SlotRepository slots, UserRepository users,
                               QueueStateRepository queueStates,
-                              ApplicationEventPublisher events) {
+                              ApplicationEventPublisher events, AppointmentStatusAuditService statusAudit) {
         this.appointments = appointments; this.doctors = doctors; this.slots = slots; this.users = users; this.queueStates = queueStates; this.events = events;
+        this.statusAudit = statusAudit;
     }
     // READ_COMMITTED ensures reads after the doctor lock see the transaction that just released it.
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
@@ -52,6 +54,7 @@ public class AppointmentService {
         }
         int token = appointments.maxToken(doctor.getId(), request.appointmentDate()) + 1;
         Appointment created = appointments.saveAndFlush(new Appointment(patient, doctor, request.appointmentDate(), slot, token));
+        statusAudit.recordInitial(created, patient.getId());
         events.publishEvent(new QueueChangedEvent(doctor.getId(), request.appointmentDate()));
         return created;
     }

@@ -21,6 +21,7 @@ class QueueConcurrencyIntegrationTest {
     @Autowired DepartmentRepository departments;
     @Autowired DoctorRepository doctors;
     @Autowired AppointmentRepository appointments;
+    @Autowired AppointmentStatusHistoryRepository statusHistory;
     @Autowired QueueStateRepository states;
     @Autowired PlatformTransactionManager transactionManager;
 
@@ -51,6 +52,7 @@ class QueueConcurrencyIntegrationTest {
         } finally {
             pool.shutdownNow();
             tx.executeWithoutResult(status -> {
+                statusHistory.deleteByAppointmentId(fixture.appointmentId());
                 appointments.deleteById(fixture.appointmentId());
                 states.findByDoctorIdAndQueueDate(fixture.doctorId(), LocalDate.now()).ifPresent(states::delete);
                 doctors.deleteById(fixture.doctorId());

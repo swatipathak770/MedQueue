@@ -84,7 +84,7 @@ class SecurityAuthorizationIntegrationTest {
         appointmentA = appointments.saveAndFlush(new Appointment(patientA, doctorA, LocalDate.now(), null, 1));
         appointmentBWaiting = appointments.saveAndFlush(new Appointment(patientB, doctorB, LocalDate.now(), null, 1));
         appointmentBCalled = new Appointment(patientB, doctorB, LocalDate.now(), null, 2);
-        appointmentBCalled.call();
+        appointmentBCalled.transitionTo(AppointmentStatus.CALLED);
         appointmentBCalled = appointments.saveAndFlush(appointmentBCalled);
 
         patientToken = token(patientA);
@@ -123,6 +123,24 @@ class SecurityAuthorizationIntegrationTest {
         mvc.perform(delete("/api/appointments/{id}", appointmentBWaiting.getId())
                         .header("Authorization", bearer(patientToken)))
                 .andExpect(status().isNotFound());
+
+        mvc.perform(get("/api/appointments/{id}/status-history", appointmentA.getId())
+                        .header("Authorization", bearer(patientToken)))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/appointments/{id}/status-history", appointmentBWaiting.getId())
+                        .header("Authorization", bearer(patientToken)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/appointments/{id}/status-history", appointmentBWaiting.getId())
+                        .header("Authorization", bearer(doctorToken)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/appointments/{id}/status-history", appointmentA.getId())
+                        .header("Authorization", bearer(doctorToken)))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/appointments/{id}/status-history", appointmentBWaiting.getId())
+                        .header("Authorization", bearer(adminToken)))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/appointments/{id}/status-history", appointmentA.getId()))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -16,7 +16,7 @@ class AppointmentServiceTest {
     private final SlotRepository slots = mock(SlotRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final AppointmentService service = new AppointmentService(appointments, doctors, slots, users,
-            mock(QueueStateRepository.class), mock(org.springframework.context.ApplicationEventPublisher.class));
+            mock(QueueStateRepository.class), mock(org.springframework.context.ApplicationEventPublisher.class), mock(AppointmentStatusAuditService.class));
     
 
     @Test void assignsNextTokenAfterLockingDoctorForWalkIn() {
