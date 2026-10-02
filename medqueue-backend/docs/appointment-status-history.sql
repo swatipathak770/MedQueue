@@ -1,4 +1,7 @@
--- Apply once to an existing MedQueue MySQL database before deploying the audit-enabled backend.
+-- LEGACY MANUAL PROCEDURE — superseded by
+-- src/main/resources/db/migration/V2__appointment_status_history.sql.
+-- Do not use as a competing schema-management path. For existing databases, follow
+-- the verified Flyway baseline procedure in the repository README / AWS guide.
 CREATE TABLE IF NOT EXISTS appointment_status_history (
     id BIGINT NOT NULL AUTO_INCREMENT,
     appointment_id BIGINT NOT NULL,

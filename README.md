@@ -33,7 +33,34 @@ The STOMP broker is Spring’s in-memory simple broker, suitable for one backend
 
 Appointment tokens are unique per doctor and appointment date. Booking locks the doctor row while it checks capacity and assigns the next token. Booking and queue mutations use READ COMMITTED so the transaction sees changes committed while it waited for that row lock; an integration test starts two actual database transactions together and verifies only one call-next succeeds. Queue transitions allow only one CALLED/IN_PROGRESS appointment at a time and enforce doctor ownership. The STOMP channel requires JWT authentication, restricts doctors to their own queue, and blocks clients from publishing queue messages. The composite index `idx_appointments_doctor_date_status` supports queue queries. See [the EXPLAIN SQL](medqueue-backend/docs/appointment-index-explain.sql); the integration test verifies MySQL can use that index when selected. On the current small local database, MySQL’s unforced optimizer plan may choose the unique doctor/date/token index instead, so no response-time improvement is claimed.
 
-Every booking records an initial `WAITING` audit entry; supported doctor queue transitions append their old/new statuses inside the same transaction. `changed_by` stores `USER:<users.id>` (or `SYSTEM` for future system initiated transitions) to avoid copying email addresses into audit rows. Authenticated patients can read their own appointment audit, doctors can read audit for their appointments, and admins can read any appointment audit through `GET /api/appointments/{id}/status-history`. For an existing MySQL schema, apply [the audit table SQL](medqueue-backend/docs/appointment-status-history.sql) once before running the updated backend; it creates the table, appointment foreign key, and chronological index.
+Every booking records an initial `WAITING` audit entry; supported doctor queue transitions append their old/new statuses inside the same transaction. `changed_by` stores `USER:<users.id>` (or `SYSTEM` for future system initiated transitions) to avoid copying email addresses into audit rows. Authenticated patients can read their own appointment audit, doctors can read audit for their appointments, and admins can read any appointment audit through `GET /api/appointments/{id}/status-history`.
+
+### Database schema and migrations
+
+Flyway owns schema changes. Fresh MySQL databases apply `V1__initial_schema.sql` followed by `V2__appointment_status_history.sql`; Hibernate runs with `ddl-auto=validate` and only checks that the resulting schema matches the entities. Do not use `ddl-auto=update` to evolve the schema. The old manual SQL at `medqueue-backend/docs/appointment-status-history.sql` is retained for historical reference and is superseded by V2.
+
+For a fresh local MySQL database, create an empty database named `medqueue` (or configure `DB_URL`) and start the backend with the `dev` profile. Flyway will create the tables on startup. The standard local `medqueue` database may already have data and schema but no Flyway history; do not point a fresh migration at it without the baseline procedure below.
+
+**Existing database baseline (one-time, only after verification):** take a database backup, inspect `SHOW CREATE TABLE` for all seven tables (`users`, `departments`, `doctors`, `slots`, `appointments`, `queue_states`, and `appointment_status_history`), and verify columns, types, indexes, foreign keys, unique constraints, and nullability against V1 and V2. Check that `flyway_schema_history` does not already exist; if it does, inspect its rows and do not baseline again. For the already-existing local MedQueue database, the target is `medqueue` (never `medqueue_test` or an unrelated database). In Windows PowerShell, from `medqueue-backend`, pin the exact database URL before enabling baseline:
+
+```powershell
+$env:DB_URL = "jdbc:mysql://localhost:3306/medqueue?useSSL=false&serverTimezone=Asia/Kolkata&allowPublicKeyRetrieval=true"
+$env:SPRING_PROFILES_ACTIVE = "dev"
+$env:SPRING_FLYWAY_BASELINE_ON_MIGRATE = "true"
+$env:SPRING_FLYWAY_BASELINE_VERSION = "2"
+mvn spring-boot:run
+```
+
+Before starting, verify that `DB_URL` names the existing `medqueue` database on the intended MySQL server. Do not run this procedure against `medqueue_test` or any unrelated database. Proceed only if that database exactly matches V1 plus V2 and has no Flyway history table. On successful startup, Flyway creates only its history table at version 2 and skips V1/V2; it does not drop, recreate, truncate, reset, or otherwise modify business tables or their data. Stop the application with Ctrl+C, then immediately remove the temporary baseline variables:
+
+```powershell
+Remove-Item Env:SPRING_FLYWAY_BASELINE_ON_MIGRATE
+Remove-Item Env:SPRING_FLYWAY_BASELINE_VERSION
+```
+
+These variables are not configured by default. If the schema matches only V1, use baseline version `1` after verifying that state; the next regular startup applies V2. If anything differs, stop and reconcile it with a reviewed migration instead of baselining. Do not set baseline-on-migrate permanently or use it to mask an unknown schema.
+
+The test profile uses a dedicated `medqueue_test` database, enables Flyway, and validates the resulting schema. Create it once if needed with `CREATE DATABASE medqueue_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;`. `DB_TEST_URL`, `DB_TEST_USERNAME`, and `DB_TEST_PASSWORD` can override its connection; test defaults use local `root`/`root` credentials only for convenience. `mvn clean test` will never select the normal `medqueue` database. Do not point `DB_TEST_URL` at a database containing user data. Tests do not drop or truncate tables.
 
 ## API summary
 
@@ -65,7 +92,7 @@ Protected endpoints accept `Authorization: Bearer <JWT>`. Role and ownership rul
 
 ### Backend using the existing MySQL installation
 
-The deployable/default configuration requires explicit `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET` environment variables. For local development only, activate the `dev` profile to use the existing MySQL installation defaults (`localhost:3306/medqueue`, `root`/`root`) and a fixed development-only JWT key. Never activate this profile in a deployed environment. The key is Base64 text that decodes to at least 32 bytes. From `medqueue-backend`, run:
+The deployable/default configuration requires explicit `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET` environment variables. For local development only, activate the `dev` profile to use the existing MySQL installation defaults (`localhost:3306/medqueue`, `root`/`root`) and a fixed development-only JWT key. Never activate this profile in a deployed environment. The key is Base64 text that decodes to at least 32 bytes. Hibernate validates schema at startup; Flyway applies versioned migrations to a new empty database. Before starting against an existing `medqueue` database that has no Flyway history, follow the safe baseline procedure above. From `medqueue-backend`, run:
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE = "dev"
@@ -98,7 +125,9 @@ docker compose up --build
 
 Open the React app at `http://localhost`, the backend at `http://localhost:8080`, Swagger at `http://localhost:8080/swagger-ui.html`, and health at `http://localhost:8080/actuator/health`. The Compose MySQL port maps to host port 3307 to avoid colliding with a local MySQL server on 3306. MySQL data persists in the `medqueue-mysql` named volume. To stop the services, use `docker compose down`; this keeps the database volume. To erase local database data, explicitly remove the volume with `docker compose down -v`.
 
-Compose environment variables are documented in [.env.example](.env.example). It contains placeholders only: replace every password and secret before starting Compose. `DB_USERNAME`, `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`, and `JWT_SECRET` are mandatory for Compose; the backend's default/deployable configuration also requires `DB_URL`. `JWT_SECRET` must be newly generated Base64 text that decodes to at least 32 bytes. Core optional values include `JWT_EXPIRATION_SECONDS`, `CORS_ALLOWED_ORIGINS`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, and `JPA_DDL_AUTO`. The browser-facing Vite values are build-time variables; leave them blank when using the included same-origin Nginx proxy.
+On a new empty Compose volume, Flyway applies V1 and V2 before Hibernate validates the schema. A volume created by an older release may contain the tables but no Flyway history; the backend will refuse to migrate that non-empty schema automatically. Verify and baseline that database as described above before starting the Flyway-enabled backend. Do not remove the volume to work around a startup failure.
+
+Compose environment variables are documented in [.env.example](.env.example). It contains placeholders only: replace every password and secret before starting Compose. `DB_USERNAME`, `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`, and `JWT_SECRET` are mandatory for Compose; the backend's default/deployable configuration also requires `DB_URL`. `JWT_SECRET` must be newly generated Base64 text that decodes to at least 32 bytes. Core optional values include `JWT_EXPIRATION_SECONDS`, `CORS_ALLOWED_ORIGINS`, `BOOTSTRAP_ADMIN_EMAIL`, and `BOOTSTRAP_ADMIN_PASSWORD`. Hibernate `ddl-auto` is fixed to `validate`; do not configure schema updates through environment variables. The browser-facing Vite values are build-time variables; leave them blank when using the included same-origin Nginx proxy.
 
 ## Testing and verification
 
@@ -111,7 +140,7 @@ mvn clean test
 
 The suite covers application startup on MySQL, patient register/login/JWT/RBAC, password hashing and duplicate registration, appointment token allocation, serialized queue advancement, and the appointment composite index plan. Frontend checks run with `npm test` and `npm run build` from `medqueue-frontend`.
 
-The test classpath activates the local-only `dev` profile so `mvn test` works with the existing local MySQL defaults. Security integration tests exercise valid, malformed, expired, and incorrectly signed JWTs; the PATIENT/DOCTOR/ADMIN REST role matrix; patient history isolation; doctor queue ownership; admin CRUD/analytics/live-queue access; and unauthenticated 401 responses.
+The test classpath activates the `test` profile and connects to `medqueue_test`, never the developer's normal `medqueue` database. Flyway migrates the dedicated test schema, then Hibernate validates it. Security integration tests exercise valid, malformed, expired, and incorrectly signed JWTs; the PATIENT/DOCTOR/ADMIN REST role matrix; patient history isolation; doctor queue ownership; admin CRUD/analytics/live-queue access; and unauthenticated 401 responses.
 
 No AWS deployment has been performed. See [AWS deployment preparation](docs/AWS_DEPLOYMENT.md) for EC2, RDS, network, secret, image, health-check, and rollback guidance.
 
@@ -119,5 +148,5 @@ No AWS deployment has been performed. See [AWS deployment preparation](docs/AWS_
 
 - Appointment history currently returns all records for the patient without pagination.
 - The simple in-memory STOMP broker supports one backend instance; multi-instance deployments need shared broker infrastructure.
-- Hibernate schema update is retained for local convenience; use versioned migrations before production and switch `JPA_DDL_AUTO` to `validate` afterward.
+- Existing local databases without Flyway history require a reviewed, one-time baseline before the Flyway-enabled application can start against them.
 - There is no AWS account or infrastructure access configured here, so deployment and a public health URL remain unverified.
