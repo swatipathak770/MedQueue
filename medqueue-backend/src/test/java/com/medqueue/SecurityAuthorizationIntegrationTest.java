@@ -241,6 +241,71 @@ class SecurityAuthorizationIntegrationTest {
         mvc.perform(get("/api/admin/queues")).andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void validationNotFoundAndAuthorizationFailuresUseSafeStructuredErrors() throws Exception {
+        mvc.perform(get("/api/admin/queues"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.error").value("Unauthorized"))
+                .andExpect(jsonPath("$.path").value("/api/admin/queues"));
+        mvc.perform(get("/api/admin/queues").header("Authorization", bearer(patientToken)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.path").value("/api/admin/queues"));
+
+        mvc.perform(post("/api/appointments").header("Authorization", bearer(patientToken))
+                        .contentType(MediaType.APPLICATION_JSON).content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.path").value("/api/appointments"))
+                .andExpect(jsonPath("$.message").value("Request body or parameter is invalid"));
+        mvc.perform(post("/api/appointments").header("Authorization", bearer(patientToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("doctorId", -1, "appointmentDate", LocalDate.now().toString(), "walkIn", true))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.doctorId").exists());
+        mvc.perform(post("/api/appointments").header("Authorization", bearer(patientToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("doctorId", doctorA.getId(), "appointmentDate", LocalDate.now().minusDays(1).toString(), "walkIn", true))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fields.appointmentDate").exists());
+        mvc.perform(post("/api/appointments").header("Authorization", bearer(patientToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("doctorId", Long.MAX_VALUE, "appointmentDate", LocalDate.now().toString(), "walkIn", true))))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.path").value("/api/appointments"));
+        mvc.perform(post("/api/appointments").header("Authorization", bearer(patientToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("doctorId", doctorA.getId(), "slotId", Long.MAX_VALUE,
+                                "appointmentDate", LocalDate.now().toString(), "walkIn", false))))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.path").value("/api/appointments"));
+        mvc.perform(get("/api/appointments/{id}/status-history", Long.MAX_VALUE)
+                        .header("Authorization", bearer(patientToken)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.path").value("/api/appointments/9223372036854775807/status-history"));
+        mvc.perform(get("/api/appointments/not-a-number/status-history").header("Authorization", bearer(patientToken)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.path").value("/api/appointments/not-a-number/status-history"));
+    }
+
+    @Test
+    void invalidQueueTransitionsAndOtherDateMutationsFailWithoutChangingAppointments() throws Exception {
+        mvc.perform(post("/api/doctor/queue/{id}/complete", appointmentA.getId())
+                        .header("Authorization", bearer(doctorToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
+        assertThat(appointments.findById(appointmentA.getId()).orElseThrow().getStatus()).isEqualTo(AppointmentStatus.WAITING);
+
+        Appointment priorDate = new Appointment(patientA, doctorA, LocalDate.now().minusDays(1), null, 50);
+        priorDate.transitionTo(AppointmentStatus.CALLED);
+        priorDate = appointments.saveAndFlush(priorDate);
+        mvc.perform(post("/api/doctor/queue/{id}/complete", priorDate.getId())
+                        .header("Authorization", bearer(doctorToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Only today's appointments can be changed from the live queue"));
+        assertThat(appointments.findById(priorDate.getId()).orElseThrow().getStatus()).isEqualTo(AppointmentStatus.CALLED);
+    }
+
     private User saveUser(String name, String email, Role role) {
         return users.saveAndFlush(new User(name, email, "test-password-hash", role, null));
     }

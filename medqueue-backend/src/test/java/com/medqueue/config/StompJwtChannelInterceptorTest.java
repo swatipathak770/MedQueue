@@ -45,6 +45,9 @@ class StompJwtChannelInterceptorTest {
     @Test void refusesMissingTokensAndClientPublishedMessages() {
         StompHeaderAccessor connect = StompHeaderAccessor.create(StompCommand.CONNECT);
         assertThrows(IllegalArgumentException.class, () -> interceptor.preSend(message(connect), mock(org.springframework.messaging.MessageChannel.class)));
+        StompHeaderAccessor malformed = StompHeaderAccessor.create(StompCommand.CONNECT);
+        malformed.addNativeHeader("Authorization", "Bearer not.a.jwt");
+        assertThrows(RuntimeException.class, () -> interceptor.preSend(message(malformed), mock(org.springframework.messaging.MessageChannel.class)));
         StompHeaderAccessor send = StompHeaderAccessor.create(StompCommand.SEND);
         send.setDestination("/topic/queue/12");
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(message(send), mock(org.springframework.messaging.MessageChannel.class)));

@@ -9,5 +9,17 @@ api.interceptors.request.use((config) => {
 })
 export function errorMessage(error) {
   const data = error?.response?.data
-  return data?.message || data?.error || error?.message || 'Something went wrong. Please try again.'
+  if (typeof data?.message === 'string' && data.message.trim()) return data.message
+  const status = error?.response?.status
+  const statusMessages = {
+    400: 'Please check the information and try again.',
+    401: 'Your session has expired. Please sign in again.',
+    403: 'You do not have permission to do that.',
+    404: 'The requested item could not be found.',
+    409: 'This request conflicts with the current state. Refresh and try again.',
+    500: 'The server could not complete the request. Please try again later.',
+  }
+  if (statusMessages[status]) return statusMessages[status]
+  if (!error?.response) return 'Cannot reach the server. Check your connection and try again.'
+  return 'Something went wrong. Please try again.'
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { api, errorMessage } from '../api/client'
 import { useQueueSubscriptions } from '../hooks/useQueueUpdates'
@@ -10,7 +10,10 @@ export default function AdminLiveQueueOverview() {
   const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState('')
   const doctorIds = useMemo(() => doctors.map((doctor) => doctor.doctorId), [doctors])
-  const { snapshots, connected } = useQueueSubscriptions(token, doctorIds)
+  const refreshBaseline = useCallback(() => api.get('/api/admin/queues')
+    .then(({ data }) => { setDoctors(data); setError('') })
+    .catch((failure) => { setError(errorMessage(failure)) }), [])
+  const { snapshots, connected } = useQueueSubscriptions(token, doctorIds, refreshBaseline)
 
   useEffect(() => {
     let active = true
@@ -21,14 +24,6 @@ export default function AdminLiveQueueOverview() {
     refresh()
     return () => { active = false }
   }, [])
-
-  // A fresh REST snapshot after every connection also catches events missed while reconnecting.
-  useEffect(() => {
-    if (!connected) return
-    api.get('/api/admin/queues')
-      .then(({ data }) => setDoctors(data))
-      .catch((failure) => setError(errorMessage(failure)))
-  }, [connected])
 
   const rows = doctors.map((doctor) => ({
     ...doctor,

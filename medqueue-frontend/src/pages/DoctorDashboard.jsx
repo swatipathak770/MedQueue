@@ -8,8 +8,9 @@ import { localDateString } from '../lib/queue'
 export default function DoctorDashboard() {
   const token = useSelector((s) => s.auth.token)
   const [queue, setQueue] = useState(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [busy, setBusy] = useState(false)
-  const { snapshot, connected } = useQueueUpdates(token, queue?.doctorId)
   const refresh = useCallback(async () => { const { data } = await api.get('/api/doctor/queue'); setQueue(data) }, [])
+  const refreshBaseline = useCallback(() => refresh().catch((failure) => setError(errorMessage(failure))), [refresh])
+  const { snapshot, connected } = useQueueUpdates(token, queue?.doctorId, refreshBaseline)
   useEffect(() => { refresh().catch((e) => setError(errorMessage(e))).finally(() => setLoading(false)) }, [refresh])
   const mutate = async (url, method = 'post', body) => { setBusy(true); setError(''); try { await api({ url, method, data: body }); await refresh() } catch (e) { setError(errorMessage(e)) } finally { setBusy(false) } }
   const todayString = localDateString()

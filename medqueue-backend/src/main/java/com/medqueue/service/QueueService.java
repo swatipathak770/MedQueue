@@ -55,6 +55,7 @@ public class QueueService {
     public Appointment complete(String email, Long appointmentId) {
         Doctor doctor = lockedDoctor(email); Appointment appointment = appointment(appointmentId);
         verifyOwner(doctor, appointment);
+        verifyToday(appointment);
         if (appointment.getStatus() != AppointmentStatus.CALLED && appointment.getStatus() != AppointmentStatus.IN_PROGRESS)
             throw new ConflictException("Only a called or in-progress appointment can be completed");
         statusAudit.transition(appointment, AppointmentStatus.DONE, doctor.getUser().getId()); events.publishEvent(new QueueChangedEvent(doctor.getId(), appointment.getAppointmentDate())); return appointment;
@@ -63,6 +64,7 @@ public class QueueService {
     public Appointment skip(String email, Long appointmentId) {
         Doctor doctor = lockedDoctor(email); Appointment appointment = appointment(appointmentId);
         verifyOwner(doctor, appointment);
+        verifyToday(appointment);
         if (appointment.getStatus() != AppointmentStatus.WAITING && appointment.getStatus() != AppointmentStatus.CALLED)
             throw new ConflictException("Only a waiting or called appointment can be skipped");
         statusAudit.transition(appointment, AppointmentStatus.SKIPPED, doctor.getUser().getId()); events.publishEvent(new QueueChangedEvent(doctor.getId(), appointment.getAppointmentDate())); return appointment;
@@ -87,5 +89,9 @@ public class QueueService {
     private Appointment appointment(Long id) { return appointments.findById(id).orElseThrow(() -> new ResourceNotFoundException("Appointment not found")); }
     private void verifyOwner(Doctor doctor, Appointment appointment) {
         if (!appointment.getDoctor().getId().equals(doctor.getId())) throw new org.springframework.security.access.AccessDeniedException("Appointment belongs to another doctor");
+    }
+    private void verifyToday(Appointment appointment) {
+        if (!appointment.getAppointmentDate().equals(LocalDate.now()))
+            throw new ConflictException("Only today's appointments can be changed from the live queue");
     }
 }

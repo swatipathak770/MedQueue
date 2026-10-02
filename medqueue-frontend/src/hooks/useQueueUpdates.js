@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
-import { mergeQueueSnapshot, subscribeToQueueTopics } from '../lib/adminQueue'
+import { createQueueSubscriptionManager, mergeQueueSnapshot } from '../lib/adminQueue'
 
-export function useQueueSubscriptions(token, doctorIds) {
+export function useQueueSubscriptions(token, doctorIds, refreshBaseline) {
   const doctorKey = [...new Set(doctorIds.filter((id) => id !== null && id !== undefined).map(String))].sort().join(',')
   const [snapshots, setSnapshots] = useState({}); const [connected, setConnected] = useState(false)
   useEffect(() => {
@@ -17,18 +17,24 @@ export function useQueueSubscriptions(token, doctorIds) {
       onConnect: () => {
         if (disposed) return
         setConnected(true)
-        subscribeToQueueTopics(client, ids, (snapshot) => {
-          setSnapshots((current) => mergeQueueSnapshot(current, snapshot))
-        })
+        setSnapshots({})
+        subscriptions.onConnect()
       },
-      onWebSocketClose: () => setConnected(false), onStompError: () => setConnected(false),
+      onWebSocketClose: () => {
+        subscriptions.onDisconnect()
+        setConnected(false)
+      }, onStompError: () => setConnected(false),
     })
-    client.activate(); return () => { disposed = true; client.deactivate(); setConnected(false) }
-  }, [token, doctorKey])
+    const subscriptions = createQueueSubscriptionManager(client, (snapshot) => {
+          setSnapshots((current) => mergeQueueSnapshot(current, snapshot))
+        }, refreshBaseline)
+    subscriptions.setDoctorIds(ids)
+    client.activate(); return () => { disposed = true; subscriptions.dispose(); client.deactivate(); setConnected(false) }
+  }, [token, doctorKey, refreshBaseline])
   return { snapshots, connected }
 }
 
-export function useQueueUpdates(token, doctorId) {
-  const { snapshots, connected } = useQueueSubscriptions(token, doctorId ? [doctorId] : [])
+export function useQueueUpdates(token, doctorId, refreshBaseline) {
+  const { snapshots, connected } = useQueueSubscriptions(token, doctorId ? [doctorId] : [], refreshBaseline)
   return { snapshot: doctorId ? snapshots[String(doctorId)] || null : null, connected }
 }

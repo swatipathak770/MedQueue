@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { api, errorMessage } from '../api/client'
 import { useQueueUpdates } from '../hooks/useQueueUpdates'
@@ -13,10 +13,10 @@ export default function PatientDashboard() {
   const [departments, setDepartments] = useState([]); const [doctors, setDoctors] = useState([]); const [history, setHistory] = useState([])
   const [slots, setSlots] = useState([]); const [department, setDepartment] = useState(''); const [date, setDate] = useState(today()); const [doctorId, setDoctorId] = useState(''); const [slotId, setSlotId] = useState('')
   const [walkIn, setWalkIn] = useState(false); const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [success, setSuccess] = useState('')
-  const { snapshot, connected } = useQueueUpdates(token, doctorId)
   const activeAppointment = useMemo(() => history.find((a) => isActiveAppointment(a, today())), [history])
 
-  const refreshHistory = async () => { const { data } = await api.get('/api/appointments/me'); setHistory(data) }
+  const refreshHistory = useCallback(async () => { const { data } = await api.get('/api/appointments/me'); setHistory(data) }, [])
+  const { snapshot, connected } = useQueueUpdates(token, doctorId, refreshHistory)
   useEffect(() => { Promise.all([api.get('/api/departments'), api.get('/api/doctors'), refreshHistory()]).then(([d, docs]) => { setDepartments(d.data); setDoctors(docs.data) }).catch((e) => setError(errorMessage(e))).finally(() => setLoading(false)) }, [])
   useEffect(() => { if (activeAppointment) setDoctorId(String(activeAppointment.doctorId)) }, [activeAppointment])
   useEffect(() => { setSlots([]); setSlotId(''); if (!doctorId || !date) return; api.get(`/api/doctors/${doctorId}/slots`, { params: { date } }).then(({ data }) => setSlots(data)).catch((e) => setError(errorMessage(e))) }, [doctorId, date])
