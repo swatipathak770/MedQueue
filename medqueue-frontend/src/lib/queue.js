@@ -11,6 +11,15 @@ export function findLiveQueueEntry(snapshot, appointmentId) {
   return snapshot?.queue?.find((entry) => entry.appointmentId === appointmentId) || null
 }
 
+export function findActiveQueueAppointment(entries = []) {
+  return entries.find((appointment) => ['CALLED', 'IN_PROGRESS'].includes(appointment.status)) || null
+}
+
+export function nowServingToken(entries = []) {
+  const active = findActiveQueueAppointment(entries)
+  return active?.tokenNumber != null ? `#${active.tokenNumber}` : '—'
+}
+
 export function localDateString(date = new Date()) {
   const pad = (value) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`

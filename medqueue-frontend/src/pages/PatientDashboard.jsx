@@ -4,6 +4,7 @@ import { api, errorMessage } from '../api/client'
 import { useQueueUpdates } from '../hooks/useQueueUpdates'
 import { EmptyState, Notice, Panel, StatusPill } from '../components/Primitives'
 import { findLiveQueueEntry, isActiveAppointment, localDateString, patientVisitConnectionLabel } from '../lib/queue'
+import { formatDoctorName } from '../lib/doctorDisplay'
 
 const today = () => localDateString()
 const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
@@ -35,7 +36,7 @@ export default function PatientDashboard() {
         <form className="space-y-4" onSubmit={book}>
           <div className="grid gap-4 sm:grid-cols-2"><label className="field-label">Department<select className="field" value={department} onChange={(e) => setDepartment(e.target.value)}><option value="">All departments</option>{departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}</select></label>
             <label className="field-label">Visit date<input className="field" type="date" min={today()} value={date} onChange={(e) => setDate(e.target.value)} required /></label></div>
-          <label className="field-label">Doctor<select className="field" value={doctorId} onChange={(e) => setDoctorId(e.target.value)} required><option value="">Choose a doctor</option>{visibleDoctors.map((d) => <option key={d.id} value={d.id}>Dr. {d.name} · {d.specialization}</option>)}</select></label>
+          <label className="field-label">Doctor<select className="field" value={doctorId} onChange={(e) => setDoctorId(e.target.value)} required><option value="">Choose a doctor</option>{visibleDoctors.map((d) => <option key={d.id} value={d.id}>{formatDoctorName(d.name)} · {d.specialization}</option>)}</select></label>
           <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"><label className="field-label">Available time<select className="field" value={slotId} onChange={(e) => setSlotId(e.target.value)} disabled={!doctorId || walkIn} required={!walkIn}><option value="">Choose a slot</option>{slots.map((s) => <option key={s.id} value={s.id} disabled={!s.available}>{s.startTime.slice(0, 5)}–{s.endTime.slice(0, 5)} · {s.available ? `${s.remainingCapacity} left` : s.remainingCapacity === 0 ? 'Full' : 'Unavailable'}</option>)}</select></label>
             <button className={`button-secondary h-[46px] ${walkIn ? 'border-teal bg-teal/5 text-teal' : ''}`} type="button" aria-pressed={walkIn} onClick={() => { setWalkIn(!walkIn); setSlotId('') }}>Join walk-in queue</button></div>
           {doctorId && !walkIn && slots.length === 0 && <p className="text-xs text-slate-400">No template slots are listed for this weekday. You can still join the walk-in queue if it is open.</p>}
@@ -46,12 +47,12 @@ export default function PatientDashboard() {
         {!activeAppointment ? <EmptyState title="No active visit">Book an appointment or join a walk-in queue to get started.</EmptyState> : <div className="rounded-2xl bg-gradient-to-br from-ink to-[#22516a] p-5 text-white">
           <div className="flex items-start justify-between"><div><div className="text-xs font-semibold uppercase tracking-[.16em] text-white/60">Your token</div><div className="mt-1 font-display text-5xl font-bold">#{activeAppointment.tokenNumber}</div></div><StatusPill status={live?.status || activeAppointment.status} /></div>
           <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/15 pt-4"><div><div className="text-xs text-white/60">Position</div><div className="mt-1 text-xl font-bold">{live?.position ?? activeAppointment.queuePosition ?? '—'}<span className="ml-1 text-sm font-normal text-white/60">in line</span></div></div><div><div className="text-xs text-white/60">Estimated wait</div><div className="mt-1 text-xl font-bold">{live?.estimatedWaitMinutes ?? activeAppointment.estimatedWaitMinutes ?? '—'}<span className="ml-1 text-sm font-normal text-white/60">min</span></div></div></div>
-          <div className="mt-4 text-sm text-white/70">Dr. {activeAppointment.doctorName} · {formatDate(activeAppointment.appointmentDate)}</div>
+          <div className="mt-4 text-sm text-white/70">{formatDoctorName(activeAppointment.doctorName)} · {formatDate(activeAppointment.appointmentDate)}</div>
         </div>}
       </Panel>
     </div>
     <Panel title="Appointment history" hint="Your upcoming visits and completed care, in one place.">
-      {loading ? <div className="skeleton h-20" /> : history.length === 0 ? <EmptyState title="No appointments yet">Your appointments will show here after your first booking.</EmptyState> : <div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Doctor</th><th>Department</th><th>Date</th><th>Token</th><th>Status</th></tr></thead><tbody>{history.map((a) => <tr key={a.id}><td className="font-semibold text-ink">Dr. {a.doctorName}</td><td>{a.department}</td><td>{formatDate(a.appointmentDate)}</td><td>#{a.tokenNumber}</td><td><StatusPill status={a.status} /></td></tr>)}</tbody></table></div>}
+      {loading ? <div className="skeleton h-20" /> : history.length === 0 ? <EmptyState title="No appointments yet">Your appointments will show here after your first booking.</EmptyState> : <div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Doctor</th><th>Department</th><th>Date</th><th>Token</th><th>Status</th></tr></thead><tbody>{history.map((a) => <tr key={a.id}><td className="font-semibold text-ink">{formatDoctorName(a.doctorName)}</td><td>{a.department}</td><td>{formatDate(a.appointmentDate)}</td><td>#{a.tokenNumber}</td><td><StatusPill status={a.status} /></td></tr>)}</tbody></table></div>}
     </Panel>
   </div>
 }

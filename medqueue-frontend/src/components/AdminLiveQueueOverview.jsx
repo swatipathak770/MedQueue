@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux'
 import { api, errorMessage } from '../api/client'
 import { useQueueSubscriptions } from '../hooks/useQueueUpdates'
 import { EmptyState, Notice, Panel } from './Primitives'
+import { formatDoctorName } from '../lib/doctorDisplay'
 
 export default function AdminLiveQueueOverview() {
   const token = useSelector((state) => state.auth.token)
@@ -13,7 +14,7 @@ export default function AdminLiveQueueOverview() {
   const refreshBaseline = useCallback(() => api.get('/api/admin/queues')
     .then(({ data }) => { setDoctors(data); setError('') })
     .catch((failure) => { setError(errorMessage(failure)) }), [])
-  const { snapshots, connected } = useQueueSubscriptions(token, doctorIds, refreshBaseline)
+  const { snapshots, connected } = useQueueSubscriptions(token, doctorIds, refreshBaseline, true)
 
   useEffect(() => {
     let active = true
@@ -44,7 +45,7 @@ export default function AdminLiveQueueOverview() {
             ? `#${doctor.activeTokenNumber} · ${doctor.activeStatus === 'IN_PROGRESS' ? 'In progress' : 'Called'}`
             : '—'
           return <tr key={doctor.doctorId}>
-            <td className="font-semibold text-ink">Dr. {doctor.doctorName}</td>
+            <td className="font-semibold text-ink">{formatDoctorName(doctor.doctorName)}</td>
             <td>{doctor.department}</td>
             <td>{doctor.waitingCount}</td>
             <td>{active}</td>

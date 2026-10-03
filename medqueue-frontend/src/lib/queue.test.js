@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findLiveQueueEntry, isActiveAppointment, localDateString, patientVisitConnectionLabel } from './queue'
+import { findActiveQueueAppointment, findLiveQueueEntry, isActiveAppointment, localDateString, nowServingToken, patientVisitConnectionLabel } from './queue'
 
 describe('patient queue helpers', () => {
   it('treats only future or current waiting visits as active', () => {
@@ -20,5 +20,14 @@ describe('patient queue helpers', () => {
     expect(patientVisitConnectionLabel(null, true)).toBe('Not active')
     expect(patientVisitConnectionLabel({ id: 1 }, true)).toBe('Live')
     expect(patientVisitConnectionLabel({ id: 1 }, false)).toBe('Connecting')
+  })
+  it('shows Now serving only for a currently active queue appointment', () => {
+    const called = { appointmentId: 1, tokenNumber: 2, status: 'CALLED' }
+    expect(findActiveQueueAppointment([called])).toBe(called)
+    expect(nowServingToken([called])).toBe('#2')
+    expect(nowServingToken([{ tokenNumber: 3, status: 'IN_PROGRESS' }])).toBe('#3')
+    expect(nowServingToken([{ tokenNumber: 2, status: 'DONE' }])).toBe('—')
+    expect(nowServingToken([{ tokenNumber: 2, status: 'SKIPPED' }])).toBe('—')
+    expect(nowServingToken([{ tokenNumber: 2, status: 'WAITING' }])).toBe('—')
   })
 })

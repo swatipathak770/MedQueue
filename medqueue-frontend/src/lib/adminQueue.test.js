@@ -1,9 +1,29 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createQueueSubscriptionManager, mergeQueueSnapshot, queueTopicDestinations, summarizeQueueSnapshot } from './adminQueue'
+import { createQueueSubscriptionManager, mergeQueueSnapshot, queueTopicDestinations, shouldConnectQueueSocket, summarizeQueueSnapshot } from './adminQueue'
 
 describe('admin live queue helpers', () => {
   it('creates one subscription destination per visible doctor', () => {
     expect(queueTopicDestinations([4, '4', 9])).toEqual(['/topic/queue/4', '/topic/queue/9'])
+  })
+
+  it('allows Admin to connect before the REST doctor list arrives', () => {
+    expect(shouldConnectQueueSocket('admin-token', [], true)).toBe(true)
+    expect(shouldConnectQueueSocket('admin-token', [4, 9], true)).toBe(true)
+    expect(shouldConnectQueueSocket('doctor-token', [], false)).toBe(false)
+    expect(shouldConnectQueueSocket('', [4], true)).toBe(false)
+
+    const destinations = []
+    const manager = createQueueSubscriptionManager({
+      subscribe: (destination) => {
+        destinations.push(destination)
+        return { unsubscribe: vi.fn() }
+      },
+    }, () => {})
+    manager.setDoctorIds([])
+    manager.onConnect()
+    manager.setDoctorIds([4, 9])
+    expect(destinations).toEqual(['/topic/queue/4', '/topic/queue/9'])
+    manager.dispose()
   })
 
   it('subscribes once per visible doctor, routes messages to that doctor, and resubscribes after reconnect', () => {

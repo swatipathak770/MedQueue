@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux'
 import { api, errorMessage } from '../api/client'
 import { useQueueUpdates } from '../hooks/useQueueUpdates'
 import { EmptyState, Notice, Panel, StatusPill } from '../components/Primitives'
-import { localDateString } from '../lib/queue'
+import { findActiveQueueAppointment, localDateString, nowServingToken } from '../lib/queue'
 
 export default function DoctorDashboard() {
   const token = useSelector((s) => s.auth.token)
@@ -18,12 +18,12 @@ export default function DoctorDashboard() {
   const current = todaysSnapshot || queue
   const entries = todaysSnapshot?.queue || queue?.appointments || []
   const waiting = entries.filter((a) => a.status === 'WAITING')
-  const active = entries.find((a) => ['CALLED', 'IN_PROGRESS'].includes(a.status))
+  const active = findActiveQueueAppointment(entries)
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
   return <div className="space-y-6">
     {error && <Notice>{error}</Notice>}
     {loading ? <div className="skeleton h-48" /> : !queue ? <Panel title="Doctor profile unavailable"><EmptyState title="No doctor profile is linked to this account">Ask an administrator to finish setting up your doctor profile.</EmptyState></Panel> : <>
-      <div className="grid gap-4 sm:grid-cols-3"><Metric label="Waiting" value={snapshot?.waitingCount ?? waiting.length} note="patients in line" /><Metric label="Now serving" value={current?.currentTokenNumber ? `#${current.currentTokenNumber}` : '—'} note={active ? active.status.toLowerCase().replace('_', ' ') : 'no active patient'} /><Metric label="Queue state" value={current?.open ? 'Open' : 'Closed'} note={current?.available ? 'Available' : 'Marked unavailable'} /></div>
+      <div className="grid gap-4 sm:grid-cols-3"><Metric label="Waiting" value={snapshot?.waitingCount ?? waiting.length} note="patients in line" /><Metric label="Now serving" value={nowServingToken(entries)} note={active ? active.status.toLowerCase().replace('_', ' ') : 'no active patient'} /><Metric label="Queue state" value={current?.open ? 'Open' : 'Closed'} note={current?.available ? 'Available' : 'Marked unavailable'} /></div>
       <Panel title="Today’s queue" hint={today} action={<span className="pill"><span className={connected ? 'live-dot' : 'offline-dot'} />{connected ? 'Live updates' : 'Connecting'}</span>}>
         <div className="mb-5 flex flex-wrap gap-2">
           <button className="button-primary" disabled={busy || !current?.available || !current?.open || !!active} onClick={() => mutate('/api/doctor/queue/next')}>Call next patient <span>→</span></button>

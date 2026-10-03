@@ -3,6 +3,10 @@ export function queueTopicDestinations(doctorIds) {
     .map((id) => `/topic/queue/${id}`)
 }
 
+export function shouldConnectQueueSocket(token, doctorIds, connectWithoutDoctors = false) {
+  return Boolean(token) && (connectWithoutDoctors || queueTopicDestinations(doctorIds).length > 0)
+}
+
 export function subscribeToQueueTopics(client, doctorIds, onSnapshot) {
   return queueTopicDestinations(doctorIds).map((destination) =>
     client.subscribe(destination, (message) => onSnapshot(JSON.parse(message.body))))
