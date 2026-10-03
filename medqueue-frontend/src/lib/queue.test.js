@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findLiveQueueEntry, isActiveAppointment, localDateString } from './queue'
+import { findLiveQueueEntry, isActiveAppointment, localDateString, patientVisitConnectionLabel } from './queue'
 
 describe('patient queue helpers', () => {
   it('treats only future or current waiting visits as active', () => {
@@ -14,5 +14,11 @@ describe('patient queue helpers', () => {
   })
   it('formats a local calendar date without UTC day drift', () => {
     expect(localDateString(new Date(2026, 8, 26, 0, 5))).toBe('2026-09-26')
+  })
+  it('shows visit connection state only when an active appointment exists', () => {
+    expect(patientVisitConnectionLabel(null, false)).toBe('Not active')
+    expect(patientVisitConnectionLabel(null, true)).toBe('Not active')
+    expect(patientVisitConnectionLabel({ id: 1 }, true)).toBe('Live')
+    expect(patientVisitConnectionLabel({ id: 1 }, false)).toBe('Connecting')
   })
 })

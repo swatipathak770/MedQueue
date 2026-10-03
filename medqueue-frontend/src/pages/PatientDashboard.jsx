@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux'
 import { api, errorMessage } from '../api/client'
 import { useQueueUpdates } from '../hooks/useQueueUpdates'
 import { EmptyState, Notice, Panel, StatusPill } from '../components/Primitives'
-import { findLiveQueueEntry, isActiveAppointment, localDateString } from '../lib/queue'
+import { findLiveQueueEntry, isActiveAppointment, localDateString, patientVisitConnectionLabel } from '../lib/queue'
 
 const today = () => localDateString()
 const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
@@ -23,6 +23,7 @@ export default function PatientDashboard() {
 
   const visibleDoctors = useMemo(() => doctors.filter((d) => !department || d.department.toLowerCase() === department.toLowerCase()), [doctors, department])
   const live = activeAppointment && snapshot?.date === activeAppointment.appointmentDate ? findLiveQueueEntry(snapshot, activeAppointment.id) : null
+  const visitConnectionLabel = patientVisitConnectionLabel(activeAppointment, connected)
   const book = async (e) => { e.preventDefault(); setError(''); setSuccess(''); setBusy(true)
     try { const { data } = await api.post('/api/appointments', { doctorId: Number(doctorId), appointmentDate: date, slotId: walkIn ? null : Number(slotId), walkIn }); setSuccess(`Your token is #${data.tokenNumber}. You are ${data.queuePosition ? `number ${data.queuePosition} in line` : 'registered'}.`); setHistory((h) => [data, ...h]); setDoctorId(String(data.doctorId)); setSlotId(''); setWalkIn(false) }
     catch (e2) { setError(errorMessage(e2)) } finally { setBusy(false) }
@@ -41,7 +42,7 @@ export default function PatientDashboard() {
           <button className="button-primary w-full sm:w-auto" disabled={busy || !doctorId || (!walkIn && !slotId)}>{busy ? 'Booking…' : walkIn ? 'Join the queue' : 'Book appointment'} <span>→</span></button>
         </form>
       </Panel>
-      <Panel title="Your live visit" hint="Queue changes appear here automatically." action={<span className="pill"><span className={connected ? 'live-dot' : 'offline-dot'} />{connected ? 'Live' : 'Connecting'}</span>}>
+      <Panel title="Your live visit" hint="Queue changes appear here automatically." action={<span className="pill"><span className={activeAppointment && connected ? 'live-dot' : 'offline-dot'} />{visitConnectionLabel}</span>}>
         {!activeAppointment ? <EmptyState title="No active visit">Book an appointment or join a walk-in queue to get started.</EmptyState> : <div className="rounded-2xl bg-gradient-to-br from-ink to-[#22516a] p-5 text-white">
           <div className="flex items-start justify-between"><div><div className="text-xs font-semibold uppercase tracking-[.16em] text-white/60">Your token</div><div className="mt-1 font-display text-5xl font-bold">#{activeAppointment.tokenNumber}</div></div><StatusPill status={live?.status || activeAppointment.status} /></div>
           <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/15 pt-4"><div><div className="text-xs text-white/60">Position</div><div className="mt-1 text-xl font-bold">{live?.position ?? activeAppointment.queuePosition ?? '—'}<span className="ml-1 text-sm font-normal text-white/60">in line</span></div></div><div><div className="text-xs text-white/60">Estimated wait</div><div className="mt-1 text-xl font-bold">{live?.estimatedWaitMinutes ?? activeAppointment.estimatedWaitMinutes ?? '—'}<span className="ml-1 text-sm font-normal text-white/60">min</span></div></div></div>
