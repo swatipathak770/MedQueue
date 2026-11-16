@@ -33,6 +33,8 @@ public class DoctorQueueController {
     }
     @PostMapping("/close") @ResponseStatus(HttpStatus.NO_CONTENT)
     public void close(Authentication auth) { queues.closeQueue(auth.getName()); }
+    @PostMapping("/reopen") @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reopen(Authentication auth) { queues.reopenQueue(auth.getName()); }
     private AppointmentResponse response(Appointment a) {
         return AppointmentResponse.from(a, 0, 0);
     }

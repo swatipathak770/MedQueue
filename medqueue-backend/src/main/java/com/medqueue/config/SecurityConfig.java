@@ -6,6 +6,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -15,6 +17,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -22,6 +25,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
@@ -30,16 +34,37 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtFilter;
     private final String allowedOrigins;
     private final ObjectMapper objectMapper;
+    private final boolean openApiPublic;
+    private final boolean production;
     public SecurityConfig(JwtAuthenticationFilter jwtFilter, ObjectMapper objectMapper,
-                          @Value("${medqueue.cors.allowed-origins:http://localhost:5173}") String allowedOrigins) {
+                          @Value("${medqueue.cors.allowed-origins}") String allowedOrigins,
+                          Environment environment) {
         this.jwtFilter = jwtFilter; this.objectMapper = objectMapper; this.allowedOrigins = allowedOrigins;
+        this.production = isProduction(environment);
+        this.openApiPublic = isOpenApiPublic(environment);
+    }
+    static boolean isProduction(Environment environment) {
+        return environment.acceptsProfiles(Profiles.of("prod"));
+    }
+    static boolean isOpenApiPublic(Environment environment) {
+        return !isProduction(environment) && environment.acceptsProfiles(Profiles.of("dev"));
     }
     @Bean SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http.csrf(csrf -> csrf.disable()).cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .headers(headers -> headers.contentTypeOptions(Customizer.withDefaults())
+                        .frameOptions(frame -> frame.deny())
+                        .referrerPolicy(referrer -> referrer.policy(
+                                ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(a -> a.requestMatchers("/api/auth/**", "/api/doctors/**", "/api/departments", "/ws/**", "/actuator/health", "/error",
-                                "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        .anyRequest().authenticated())
+                .authorizeHttpRequests(a -> {
+                    a.requestMatchers("/api/auth/**", "/api/doctors/**", "/api/departments", "/ws/**", "/actuator/health", "/error").permitAll();
+                    if (production) {
+                        a.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").denyAll();
+                    } else if (openApiPublic) {
+                        a.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll();
+                    }
+                    a.anyRequest().authenticated();
+                })
                 .exceptionHandling(e -> e.authenticationEntryPoint((request, response, exception) ->
                                 writeSecurityError(request, response, 401, "Unauthorized", "Authentication is required"))
                         .accessDeniedHandler((request, response, exception) ->

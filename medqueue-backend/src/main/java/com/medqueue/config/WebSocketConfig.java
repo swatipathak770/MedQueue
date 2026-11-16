@@ -13,7 +13,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final StompJwtChannelInterceptor interceptor;
     private final String allowedOrigins;
-    public WebSocketConfig(StompJwtChannelInterceptor interceptor, @Value("${medqueue.cors.allowed-origins:http://localhost:5173}") String allowedOrigins) {
+    public WebSocketConfig(StompJwtChannelInterceptor interceptor, @Value("${medqueue.cors.allowed-origins}") String allowedOrigins) {
         this.interceptor = interceptor; this.allowedOrigins = allowedOrigins;
     }
     @Override public void configureMessageBroker(MessageBrokerRegistry registry) {

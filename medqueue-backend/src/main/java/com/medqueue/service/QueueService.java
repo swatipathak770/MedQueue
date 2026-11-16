@@ -78,6 +78,16 @@ public class QueueService {
         Doctor doctor = lockedDoctor(email); LocalDate today = LocalDate.now(); stateFor(doctor, today).setOpen(false);
         events.publishEvent(new QueueChangedEvent(doctor.getId(), today));
     }
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public void reopenQueue(String email) {
+        Doctor doctor = lockedDoctor(email);
+        LocalDate today = LocalDate.now();
+        QueueState state = states.findByDoctorIdAndQueueDate(doctor.getId(), today)
+                .orElseThrow(() -> new ConflictException("Today's queue has not been closed"));
+        if (state.isOpen()) throw new ConflictException("Today's queue is already open");
+        state.setOpen(true);
+        events.publishEvent(new QueueChangedEvent(doctor.getId(), today));
+    }
     private QueueState stateFor(Doctor doctor, LocalDate date) {
         return states.findByDoctorIdAndQueueDate(doctor.getId(), date).orElseGet(() -> states.save(new QueueState(doctor, date)));
     }

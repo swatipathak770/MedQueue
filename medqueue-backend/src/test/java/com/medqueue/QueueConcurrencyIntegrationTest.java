@@ -75,6 +75,31 @@ class QueueConcurrencyIntegrationTest {
         }
     }
 
+    @Test void concurrentCloseAndReopenAreSerializedAndPreserveAppointmentTokensAndStatuses() throws Exception {
+        Fixture fixture = createFlowFixture();
+        try {
+            booking.book(fixture.patientEmail(), new BookingRequest(fixture.doctorId(), LocalDate.now(), null, true));
+            booking.book(fixture.patientEmail(), new BookingRequest(fixture.doctorId(), LocalDate.now(), null, true));
+            queues.callNext(fixture.email());
+            queues.closeQueue(fixture.email());
+
+            List<String> before = appointments.findByDoctorIdAndAppointmentDateOrderByTokenNumber(fixture.doctorId(), LocalDate.now())
+                    .stream().map(a -> a.getTokenNumber() + ":" + a.getStatus()).toList();
+            assertThat(before).containsExactly("1:CALLED", "2:WAITING");
+
+            List<Outcome> outcomes = concurrently(() -> queues.closeQueue(fixture.email()),
+                    () -> queues.reopenQueue(fixture.email()));
+
+            assertThat(outcomes).containsExactlyInAnyOrder(Outcome.SUCCEEDED, Outcome.SUCCEEDED);
+            List<String> after = appointments.findByDoctorIdAndAppointmentDateOrderByTokenNumber(fixture.doctorId(), LocalDate.now())
+                    .stream().map(a -> a.getTokenNumber() + ":" + a.getStatus()).toList();
+            assertThat(after).containsExactlyElementsOf(before);
+            assertThat(states.findByDoctorIdAndQueueDate(fixture.doctorId(), LocalDate.now())).isPresent();
+        } finally {
+            cleanup(fixture);
+        }
+    }
+
     @Test void repeatedCallNextIsRejectedWithoutCallingAnotherAppointmentOrDuplicatingHistory() throws Exception {
         Fixture fixture = createFlowFixture();
         try {
@@ -190,19 +215,30 @@ class QueueConcurrencyIntegrationTest {
     }
 
     private List<Outcome> concurrently(QueueAction action) throws Exception {
+        return concurrently(action, action);
+    }
+
+    private List<Outcome> concurrently(QueueAction firstAction, QueueAction secondAction) throws Exception {
         var ready = new CountDownLatch(2);
         var start = new CountDownLatch(1);
         var pool = Executors.newFixedThreadPool(2);
         try {
-            Callable<Outcome> operation = () -> {
+            Callable<Outcome> operation1 = () -> {
                 ready.countDown();
                 if (!ready.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent workers did not become ready");
                 start.await();
-                try { action.run(); return Outcome.SUCCEEDED; }
+                try { firstAction.run(); return Outcome.SUCCEEDED; }
                 catch (ConflictException expected) { return Outcome.REJECTED; }
             };
-            var first = pool.submit(operation);
-            var second = pool.submit(operation);
+            Callable<Outcome> operation2 = () -> {
+                ready.countDown();
+                if (!ready.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent workers did not become ready");
+                start.await();
+                try { secondAction.run(); return Outcome.SUCCEEDED; }
+                catch (ConflictException expected) { return Outcome.REJECTED; }
+            };
+            var first = pool.submit(operation1);
+            var second = pool.submit(operation2);
             if (!ready.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Concurrent workers did not become ready");
             start.countDown();
             return List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS));

@@ -7,7 +7,10 @@ RUN mvn -q -DskipTests package
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-RUN useradd --system --uid 10001 medqueue
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 medqueue
 COPY --from=build /workspace/target/medqueue-backend-0.0.1-SNAPSHOT.jar /app/app.jar
 USER 10001
 EXPOSE 8080

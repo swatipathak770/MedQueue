@@ -20,13 +20,19 @@ public class JwtService {
 
     public JwtService(@Value("${medqueue.jwt.secret}") String secret,
                       @Value("${medqueue.jwt.expiration-seconds:3600}") long expirationSeconds) {
+        if (expirationSeconds <= 0) throw new IllegalArgumentException("JWT expiration must be a positive number of seconds");
         this.key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
         this.expirationSeconds = expirationSeconds;
     }
     public String generateToken(UserDetails user) {
         Instant now = Instant.now();
-        return Jwts.builder().subject(user.getUsername()).issuedAt(Date.from(now))
-                .expiration(Date.from(now.plusSeconds(expirationSeconds))).signWith(key).compact();
+        var builder = Jwts.builder().subject(user.getUsername()).issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusSeconds(expirationSeconds)));
+        int keyBytes = key.getEncoded().length;
+        if (keyBytes >= 64) builder.signWith(key, Jwts.SIG.HS512);
+        else if (keyBytes >= 48) builder.signWith(key, Jwts.SIG.HS384);
+        else builder.signWith(key, Jwts.SIG.HS256);
+        return builder.compact();
     }
     public long getExpirationSeconds() { return expirationSeconds; }
     public String extractUsername(String token) { return extractClaim(token, Claims::getSubject); }

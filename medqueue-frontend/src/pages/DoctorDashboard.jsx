@@ -31,6 +31,7 @@ export default function DoctorDashboard() {
           {active && <button className="button-secondary" disabled={busy} onClick={() => mutate(`/api/doctor/queue/${active.appointmentId || active.id}/skip`)}>Skip / no-show</button>}
           <button className="button-secondary" disabled={busy} onClick={() => mutate('/api/doctor/queue/availability', 'put', { available: !current?.available })}>{current?.available ? 'Mark unavailable' : 'Mark available'}</button>
           <button className="button-quiet" disabled={busy || !current?.open} onClick={() => { if (window.confirm('Close today’s queue? New calls will be stopped for the rest of today.')) mutate('/api/doctor/queue/close') }}>Close today’s queue</button>
+          {!current?.open && <button className="button-secondary" disabled={busy} onClick={() => mutate('/api/doctor/queue/reopen')}>Reopen today’s queue</button>}
         </div>
         {entries.length === 0 ? <EmptyState title="The queue is clear">New appointments and walk-ins will appear here.</EmptyState> : <div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Token</th><th>Position</th><th>Estimated wait</th><th>Status</th></tr></thead><tbody>{entries.map((a) => <tr key={a.appointmentId || a.id}><td className="font-display text-lg font-bold text-ink">#{a.tokenNumber}</td><td>{a.position || '—'}</td><td>{a.estimatedWaitMinutes ? `${a.estimatedWaitMinutes} min` : '—'}</td><td><StatusPill status={a.status} /></td></tr>)}</tbody></table></div>}
       </Panel>

@@ -24,7 +24,6 @@ class AuthIntegrationTest {
     @Autowired UserRepository users;
 
     @Test void registrationLoginAndProtectedHistoryFlow() throws Exception {
-        mvc.perform(get("/v3/api-docs")).andExpect(status().isOk()).andExpect(jsonPath("$.info.title").value("MedQueue API"));
         mvc.perform(get("/actuator/health")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("UP"));
         String email = "patient-" + java.util.UUID.randomUUID() + "@example.test";
         String body = "{\"name\":\"Demo Patient\",\"email\":\"" + email + "\",\"password\":\"strong-password\",\"phone\":\"\"}";
@@ -40,6 +39,12 @@ class AuthIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andReturn().getResponse().getContentAsString();
         JsonNode response = json.readTree(login);
+        String bearer = "Bearer " + response.get("token").asText();
+        mvc.perform(get("/v3/api-docs").header("Authorization", bearer))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.info.title").value("MedQueue API"));
+        mvc.perform(get("/v3/api-docs/swagger-config").header("Authorization", bearer)).andExpect(status().isOk());
+        mvc.perform(get("/swagger-ui.html").header("Authorization", bearer)).andExpect(status().is3xxRedirection());
+        mvc.perform(get("/swagger-ui/index.html").header("Authorization", bearer)).andExpect(status().isOk());
         mvc.perform(get("/api/appointments/me").header("Authorization", "Bearer " + response.get("token").asText()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(0)));
         mvc.perform(get("/api/admin/doctors").header("Authorization", "Bearer " + response.get("token").asText()))

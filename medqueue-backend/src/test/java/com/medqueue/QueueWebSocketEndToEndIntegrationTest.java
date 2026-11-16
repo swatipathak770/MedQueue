@@ -120,6 +120,53 @@ class QueueWebSocketEndToEndIntegrationTest {
         assertSnapshotIsFor(skipUpdate, doctor.getId());
     }
 
+    @Test
+    void patientsNeedAnEligibleAppointmentAndAdminsMaySubscribeToAnyDoctorQueue() throws Exception {
+        String suffix = UUID.randomUUID().toString();
+        User patient = saveUser("Authorized WS Patient", "ws-authorized-patient-" + suffix + "@example.test", Role.PATIENT);
+        User unrelatedPatient = saveUser("Unrelated WS Patient", "ws-unrelated-patient-" + suffix + "@example.test", Role.PATIENT);
+        User doctorUser = saveUser("Appointment WS Doctor", "ws-appointment-doctor-" + suffix + "@example.test", Role.DOCTOR);
+        User otherDoctorUser = saveUser("Other Appointment WS Doctor", "ws-other-appointment-doctor-" + suffix + "@example.test", Role.DOCTOR);
+        User admin = saveUser("WS Admin", "ws-admin-" + suffix + "@example.test", Role.ADMIN);
+        Department department = departments.saveAndFlush(new Department("WS patient " + suffix));
+        Doctor doctor = doctors.saveAndFlush(new Doctor(doctorUser, department, "General", 10));
+        Doctor otherDoctor = doctors.saveAndFlush(new Doctor(otherDoctorUser, department, "General", 10));
+
+        AppointmentResponse booked = http.exchange(url("/api/appointments"), HttpMethod.POST,
+                authorized(token(patient), new BookingRequest(doctor.getId(), LocalDate.now(), null, true)), AppointmentResponse.class)
+                .getBody();
+        assertNotNull(booked);
+
+        startClient();
+        SessionHandler patientHandler = new SessionHandler();
+        StompSession patientSession = connect(token(patient), patientHandler);
+        String ownQueue = "/topic/queue/" + doctor.getId();
+        patientSession.subscribe(ownQueue, new SnapshotHandler(patientHandler.messages));
+        awaitSubscription(patient.getEmail(), ownQueue);
+        messaging.convertAndSend(ownQueue,
+                new QueueUpdateResponse(doctor.getId(), LocalDate.now(), Instant.now(), true, true, 0, 1, List.of()));
+        assertThat(patientHandler.messages.poll(WAIT_SECONDS, TimeUnit.SECONDS)).isNotNull();
+
+        SessionHandler unrelatedHandler = new SessionHandler();
+        StompSession unrelatedSession = connect(token(unrelatedPatient), unrelatedHandler);
+        unrelatedSession.subscribe(ownQueue, new SnapshotHandler(unrelatedHandler.messages));
+        assertThat(unrelatedHandler.errorFrames.poll(WAIT_SECONDS, TimeUnit.SECONDS)).isNotNull();
+
+        SessionHandler wrongDoctorHandler = new SessionHandler();
+        StompSession wrongDoctorSession = connect(token(patient), wrongDoctorHandler);
+        wrongDoctorSession.subscribe("/topic/queue/" + otherDoctor.getId(), new SnapshotHandler(wrongDoctorHandler.messages));
+        assertThat(wrongDoctorHandler.errorFrames.poll(WAIT_SECONDS, TimeUnit.SECONDS)).isNotNull();
+
+        SessionHandler adminHandler = new SessionHandler();
+        StompSession adminSession = connect(token(admin), adminHandler);
+        String otherQueue = "/topic/queue/" + otherDoctor.getId();
+        adminSession.subscribe(otherQueue, new SnapshotHandler(adminHandler.messages));
+        awaitSubscription(admin.getEmail(), otherQueue);
+        messaging.convertAndSend(otherQueue,
+                new QueueUpdateResponse(otherDoctor.getId(), LocalDate.now(), Instant.now(), true, true, 0, 0, List.of()));
+        assertThat(adminHandler.messages.poll(WAIT_SECONDS, TimeUnit.SECONDS)).isNotNull();
+    }
+
     @AfterEach
     void stopClient() {
         sessions.forEach(session -> { if (session.isConnected()) session.disconnect(); });

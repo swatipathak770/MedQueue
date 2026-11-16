@@ -13,6 +13,7 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     @Query("select coalesce(max(a.tokenNumber), 0) from Appointment a where a.doctor.id=:doctorId and a.appointmentDate=:date")
     int maxToken(@Param("doctorId") Long doctorId, @Param("date") LocalDate date);
     long countByDoctorIdAndAppointmentDateAndSlotIdAndStatusIn(Long doctorId, LocalDate appointmentDate, Long slotId, Collection<AppointmentStatus> statuses);
+    boolean existsByPatient_EmailAndDoctor_IdAndStatusIn(String patientEmail, Long doctorId, Collection<AppointmentStatus> statuses);
     List<Appointment> findByPatientEmailOrderByAppointmentDateDescTokenNumberDesc(String email);
     List<Appointment> findByDoctorIdAndAppointmentDateOrderByTokenNumber(Long doctorId, LocalDate appointmentDate);
     long countByDoctorIdAndAppointmentDateAndStatusInAndTokenNumberLessThan(Long doctorId, LocalDate appointmentDate,
