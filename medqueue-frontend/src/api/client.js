@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const apiBase = import.meta.env.VITE_API_URL === undefined ? 'http://localhost:8080' : import.meta.env.VITE_API_URL
+const apiBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || ''
 export const api = axios.create({ baseURL: apiBase })
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('medqueue.token')

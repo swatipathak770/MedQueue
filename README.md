@@ -8,6 +8,7 @@ MedQueue is a Smart OPD appointment and queue management system. Patients book a
 MedQueue/
 ├── medqueue-backend/       Spring Boot 3.5.16 / Java 17 API
 ├── medqueue-frontend/      React 19 / Vite / Redux Toolkit / Tailwind SPA
+├── docs/DEPLOYMENT_VERCEL_RENDER_TIDB.md  Vercel, Render, and TiDB Cloud deployment
 ├── docs/AWS_DEPLOYMENT.md  EC2 and RDS deployment preparation
 ├── docker-compose.yml      MySQL + backend + frontend
 └── .env.example            Compose environment template
