@@ -42,9 +42,10 @@ import java.util.function.Predicate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(classes = MedqueueBackendApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class QueueWebSocketEndToEndIntegrationTest {
     private static final long WAIT_SECONDS = 8;
+    private static final String DEPLOYED_FRONTEND_ORIGIN = "https://medqueue-red.vercel.app";
     @LocalServerPort int port;
     @Autowired TestRestTemplate http;
     @Autowired UserRepository users;
@@ -58,6 +59,23 @@ class QueueWebSocketEndToEndIntegrationTest {
     private final List<StompSession> sessions = new CopyOnWriteArrayList<>();
     private final ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
     private WebSocketStompClient stompClient;
+
+    @Test
+    void sockJsInfoAllowsCredentialedRequestsFromDeployedFrontendWithoutDuplicateCorsHeaders() {
+        HttpHeaders requestHeaders = new HttpHeaders();
+        requestHeaders.setOrigin(DEPLOYED_FRONTEND_ORIGIN);
+
+        var response = http.exchange("http://127.0.0.1:" + port + "/ws/info", HttpMethod.GET,
+                new HttpEntity<>(requestHeaders), String.class);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getHeaders().getAccessControlAllowOrigin()).isEqualTo(DEPLOYED_FRONTEND_ORIGIN);
+        assertThat(response.getHeaders().getAccessControlAllowCredentials()).isTrue();
+        assertThat(response.getHeaders().get("Access-Control-Allow-Origin"))
+                .containsExactly(DEPLOYED_FRONTEND_ORIGIN);
+        assertThat(response.getHeaders().get("Access-Control-Allow-Credentials"))
+                .containsExactly("true");
+    }
 
     @Test
     void authenticatedDoctorReceivesSnapshotsForBookingCallCompleteAndSkipAndCannotSubscribeCrossDoctor() throws Exception {

@@ -21,7 +21,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.setApplicationDestinationPrefixes("/app");
     }
     @Override public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws").setAllowedOriginPatterns(allowedOrigins.split(",")).withSockJS();
+        String[] origins = java.util.stream.Stream.concat(
+                java.util.Arrays.stream(allowedOrigins.split(",")).map(String::trim),
+                java.util.stream.Stream.of("https://medqueue-red.vercel.app"))
+                .distinct().toArray(String[]::new);
+        registry.addEndpoint("/ws").setAllowedOrigins(origins).withSockJS();
     }
     @Override public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(interceptor);

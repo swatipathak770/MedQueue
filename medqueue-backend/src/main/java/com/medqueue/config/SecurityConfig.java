@@ -81,13 +81,25 @@ public class SecurityConfig {
         objectMapper.writeValue(response.getOutputStream(), body);
     }
     @Bean CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration restCors = corsConfiguration(false, false);
+        CorsConfiguration webSocketCors = corsConfiguration(true, true);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/ws/**", webSocketCors);
+        source.registerCorsConfiguration("/**", restCors);
+        return source;
+    }
+    private CorsConfiguration corsConfiguration(boolean allowCredentials, boolean webSocket) {
         CorsConfiguration cors = new CorsConfiguration();
-        cors.setAllowedOrigins(Arrays.stream(allowedOrigins.split(",")).map(String::trim).toList());
+        List<String> origins = Arrays.stream(allowedOrigins.split(",")).map(String::trim).collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        if (webSocket && !origins.contains("https://medqueue-red.vercel.app")) {
+            origins.add("https://medqueue-red.vercel.app");
+        }
+        cors.setAllowedOrigins(origins);
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         cors.setExposedHeaders(List.of("Location"));
-        cors.setAllowCredentials(false);
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource(); source.registerCorsConfiguration("/**", cors); return source;
+        cors.setAllowCredentials(allowCredentials);
+        return cors;
     }
     @Bean PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
     @Bean AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
